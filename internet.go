@@ -130,6 +130,8 @@ func (p *IPv4Packet) buildTransportLayer(data []byte) {
 		p.data = new(TCPSegment)
 	case IPP_UDP:
 		p.data = new(UDPDatagram)
+	case IPP_SCTP:
+		p.data = new(SCTPSegment)
 	default:
 		p.data = new(UnknownTransport)
 	}
@@ -199,6 +201,8 @@ func (p *IPv6Packet) parseRemainingHeaders(data []byte) {
 		p.data = new(TCPSegment)
 	case IPP_UDP:
 		p.data = new(UDPDatagram)
+	case IPP_SCTP:
+		p.data = new(SCTPSegment)
 	default:
 		p.data = new(UnknownTransport)
 	}

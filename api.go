@@ -154,6 +154,33 @@ const (
 	IPP_SCTP      IPProtocol = 0x84
 )
 
+type SCTPChunkType uint8
+
+const (
+	SCTP_CHUNK_DATA              SCTPChunkType = 0
+	SCTP_CHUNK_INIT              SCTPChunkType = 1
+	SCTP_CHUNK_INIT_ACK          SCTPChunkType = 2
+	SCTP_CHUNK_SACK              SCTPChunkType = 3
+	SCTP_CHUNK_HEARTBEAT         SCTPChunkType = 4
+	SCTP_CHUNK_HEARTBEAT_ACK     SCTPChunkType = 5
+	SCTP_CHUNK_ABORT             SCTPChunkType = 6
+	SCTP_CHUNK_SHUTDOWN          SCTPChunkType = 7
+	SCTP_CHUNK_SHUTDOWN_ACK      SCTPChunkType = 8
+	SCTP_CHUNK_ERROR             SCTPChunkType = 9
+	SCTP_CHUNK_COOKIE_ECHO       SCTPChunkType = 10
+	SCTP_CHUNK_COOKIE_ACK        SCTPChunkType = 11
+	SCTP_CHUNK_SHUTDOWN_COMPLETE SCTPChunkType = 14
+)
+
+type SCTPChunkParameterType uint16
+
+const (
+	SCTP_CHUNK_PARAMETER_IPV4_SENDER               SCTPChunkParameterType = 5
+	SCTP_CHUNK_PARAMETER_IPV6_SENDER               SCTPChunkParameterType = 6
+	SCTP_CHUNK_PARAMETER_COOKIE_LIFESPAN_INCREMENT SCTPChunkParameterType = 9
+	SCTP_CHUNK_PARAMETER_HEARTBEAT_INFO            SCTPChunkParameterType = 1
+)
+
 // PcapFile represents the parsed form of a single .pcap file. The structure
 // contains some details about the file itself, but is mostly a container for
 // the parsed Packets.
