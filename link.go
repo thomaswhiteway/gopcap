@@ -1,5 +1,10 @@
 package gopcap
 
+import (
+	"encoding/binary"
+	"io"
+)
+
 // The minimum value of the EtherType field. If the value is less than this, it's a length.
 // The above statement isn't entirely true, but it's true enough.
 const minEtherType uint16 = 1536
@@ -18,9 +23,9 @@ func (u *UnknownLink) LinkData() InternetLayer {
 	return u.data
 }
 
-func (u *UnknownLink) FromBytes(data []byte) error {
+func (u *UnknownLink) ReadFrom(src io.Reader) error {
 	u.data = new(UnknownINet)
-	err := u.data.FromBytes(data)
+	err := u.data.ReadFrom(src)
 	return err
 }
 
@@ -30,8 +35,8 @@ func (u *UnknownLink) FromBytes(data []byte) error {
 
 // EthernetFrame represents a single ethernet frame. Valid only when the LinkType is ETHERNET.
 type EthernetFrame struct {
-	MACSource      []byte
-	MACDestination []byte
+	MACSource      [6]byte
+	MACDestination [6]byte
 	VLANTag        []byte
 	Length         uint16
 	EtherType      EtherType
@@ -43,37 +48,56 @@ func (e *EthernetFrame) LinkData() InternetLayer {
 }
 
 // Given a series of bytes, populate the EthernetFrame structure.
-func (e *EthernetFrame) FromBytes(data []byte) error {
-	if len(data) <= 14 {
-		return InsufficientLength
+func (e *EthernetFrame) ReadFrom(src io.Reader) error {
+
+	err := readFields(src, networkByteOrder, []interface{}{
+		&e.MACDestination,
+		&e.MACSource,
+	})
+
+	if err != nil {
+		return err
 	}
 
-	e.MACDestination = data[0:6]
-	e.MACSource = data[6:12]
-
-	// Check for a VLAN tag. If it's there, copy it and the reslice to keep the indices the
-	// same through the rest of the function.
-	if (data[12] == 0x81) && (data[13] == 0x00) {
-		e.VLANTag = data[12:16]
-		data = data[4:]
+	nextValue := uint16(0)
+	err = binary.Read(src, networkByteOrder, &nextValue)
+	if err != nil {
+		return err
 	}
 
-	// Handle the length/EtherType nonsense.
-	lenOrType := getUint16(data[12:14], false)
-	if lenOrType >= minEtherType {
-		e.EtherType = EtherType(lenOrType)
+	// Check for a VLAN tag.
+	if nextValue == 0x8100 {
+		vlanTag := make([]byte, 4)
+		vlanTag[0] = 0x81
+		vlanTag[1] = 0x00
+
+		_, err = src.Read(vlanTag[2:])
+		if err != nil {
+			return err
+		}
+
+		e.VLANTag = vlanTag
+
+		// Re-read the next value
+		err = binary.Read(src, networkByteOrder, &nextValue)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Read the size or type
+	if nextValue < minEtherType {
+		e.Length = nextValue
 	} else {
-		e.Length = lenOrType
+		e.EtherType = EtherType(nextValue)
 	}
 
 	// Everything else is payload data.
-	e.buildInternetLayer(data[14:])
-
-	return nil
+	return e.readInternetLayer(src)
 }
 
 // buildInternetLayer creates the internet layer sub-data for a link layer datagram.
-func (e *EthernetFrame) buildInternetLayer(data []byte) {
+func (e *EthernetFrame) readInternetLayer(src io.Reader) error {
 	switch e.EtherType {
 	case ETHERTYPE_IPV4:
 		e.data = new(IPv4Packet)
@@ -82,5 +106,6 @@ func (e *EthernetFrame) buildInternetLayer(data []byte) {
 	default:
 		e.data = new(UnknownINet)
 	}
-	e.data.FromBytes(data)
+	return e.data.ReadFrom(src)
+
 }

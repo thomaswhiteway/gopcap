@@ -14,7 +14,7 @@ func TestTCPGood(t *testing.T) {
 	}
 	optBytes := []byte{0x01, 0x01, 0x08, 0x0a, 0x00, 0xd8, 0xea, 0x48, 0x82, 0xe4, 0xda, 0xb0}
 	pkt := new(TCPSegment)
-	err := pkt.FromBytes(data)
+	err := pkt.ReadFrom(bytes.NewReader(data))
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)

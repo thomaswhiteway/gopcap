@@ -1,31 +1,32 @@
 package gopcap
 
 import (
+	"bytes"
+	"encoding/binary"
 	"testing"
 	"time"
 )
 
-type byteReader []byte
-
-func (r byteReader) Read(p []byte) (int, error) {
-	n := copy(p, r)
-	return n, nil
-}
-
 func TestCheckMagicNum(t *testing.T) {
-	in := []byteReader{
-		byteReader{0xa1, 0xb2, 0xc3, 0xd4},
-		byteReader{0xd4, 0xc3, 0xb2, 0xa1},
-		byteReader{0xd4, 0xc3, 0xb2, 0xa0},
-		byteReader{0xd4, 0xc3, 0xb2},
+	in := [][]byte{
+		{0xa1, 0xb2, 0xc3, 0xd4},
+		{0xd4, 0xc3, 0xb2, 0xa1},
+		{0xd4, 0xc3, 0xb2, 0xa0},
+		{0xd4, 0xc3, 0xb2},
 	}
 
 	first := []bool{true, true, false, false}
-	second := []bool{false, true, false, false}
+	second := []binary.ByteOrder{
+		binary.BigEndian,
+		binary.LittleEndian,
+		nil,
+		nil,
+	}
 	third := []error{nil, nil, NotAPcapFile, InsufficientLength}
 
 	for i, input := range in {
-		out1, out2, out3 := checkMagicNum(input)
+		reader := bytes.NewReader(input)
+		out1, out2, out3 := checkMagicNum(reader)
 
 		if out1 != first[i] {
 			t.Errorf("Unexpected first return val: expected %v, got %v.", first[i], out1)
@@ -42,9 +43,9 @@ func TestCheckMagicNum(t *testing.T) {
 }
 
 func TestPopulatePacketHeaderGood(t *testing.T) {
-	in := byteReader{0xfa, 0x4f, 0xef, 0x44, 0x64, 0xfd, 0x09, 0x00, 0x60, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00}
+	in := bytes.NewReader([]byte{0xfa, 0x4f, 0xef, 0x44, 0x64, 0xfd, 0x09, 0x00, 0x60, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00})
 	pkt := new(Packet)
-	err := populatePacketHeader(pkt, in, true)
+	err := pkt.readPacketHeader(in, binary.LittleEndian)
 	correct_ts := 321259*time.Hour + 31*time.Minute + 6*time.Second + 654*time.Millisecond + 692*time.Microsecond
 
 	if err != nil {
@@ -62,9 +63,9 @@ func TestPopulatePacketHeaderGood(t *testing.T) {
 }
 
 func TestPopulatePacketHeaderErr(t *testing.T) {
-	in := byteReader{0xfa}
+	in := bytes.NewReader([]byte{0xfa})
 	pkt := new(Packet)
-	err := populatePacketHeader(pkt, in, false)
+	err := pkt.readPacketHeader(in, binary.LittleEndian)
 
 	if err != InsufficientLength {
 		t.Errorf("Unexpected error: expected %v, got %v", InsufficientLength, err)
@@ -72,9 +73,9 @@ func TestPopulatePacketHeaderErr(t *testing.T) {
 }
 
 func TestPopulateFileHeaderGood(t *testing.T) {
-	in := byteReader{0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00}
+	in := bytes.NewReader([]byte{0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00})
 	fle := new(PcapFile)
-	err := populateFileHeader(fle, in, true)
+	err := fle.readFileHeader(in, binary.LittleEndian)
 
 	if err != nil {
 		t.Errorf("Received unexpected error: %v", err)
@@ -100,11 +101,11 @@ func TestPopulateFileHeaderGood(t *testing.T) {
 }
 
 func TestPopulateFileHeaderErr(t *testing.T) {
-	in := byteReader{0xfa}
+	in := bytes.NewReader([]byte{0xfa})
 	fle := new(PcapFile)
-	err := populateFileHeader(fle, in, false)
+	err := fle.readFileHeader(in, binary.BigEndian)
 
-	if err != InsufficientLength {
+	if err != UnexpectedEOF {
 		t.Errorf("Unexpected error: expected %v, got %v", InsufficientLength, err)
 	}
 }

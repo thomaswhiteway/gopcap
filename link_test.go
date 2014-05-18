@@ -16,15 +16,15 @@ func TestEthernetFrameGood(t *testing.T) {
 	expectedDst := []byte{0x00, 0x16, 0xE3, 0x19, 0x27, 0x15}
 	expectedSrc := []byte{0x00, 0x04, 0x76, 0x96, 0x7B, 0xDA}
 	frame := new(EthernetFrame)
-	err := frame.FromBytes(data)
+	err := frame.ReadFrom(bytes.NewReader(data))
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	if bytes.Compare(frame.MACDestination, expectedDst) != 0 {
+	if bytes.Compare(frame.MACDestination[:], expectedDst) != 0 {
 		t.Errorf("Unexpected destination MAC: expected %v, got %v", frame.MACDestination, expectedDst)
 	}
-	if bytes.Compare(frame.MACSource, expectedSrc) != 0 {
+	if bytes.Compare(frame.MACSource[:], expectedSrc) != 0 {
 		t.Errorf("Unexpected source MAC: expected %v, got %v.", frame.MACSource, expectedSrc)
 	}
 	if len(frame.VLANTag) != 0 {

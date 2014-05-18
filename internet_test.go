@@ -17,7 +17,7 @@ func TestIPv4Good(t *testing.T) {
 	expectedSrc := []byte{192, 168, 1, 2}
 	expectedDst := []byte{212, 204, 214, 114}
 	pkt := new(IPv4Packet)
-	err := pkt.FromBytes(data)
+	err := pkt.ReadFrom(bytes.NewReader(data))
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -55,10 +55,10 @@ func TestIPv4Good(t *testing.T) {
 	if pkt.Checksum != uint16(22223) {
 		t.Errorf("Unexpected checksum: expected %v, got %v", 22223, pkt.Checksum)
 	}
-	if bytes.Compare(pkt.SourceAddress, expectedSrc) != 0 {
+	if !bytes.Equal(pkt.SourceAddress[:], expectedSrc) {
 		t.Errorf("Unexpected source address: expected %v, got %v", expectedSrc, pkt.SourceAddress)
 	}
-	if bytes.Compare(pkt.DestAddress, expectedDst) != 0 {
+	if !bytes.Equal(pkt.DestAddress[:], expectedDst) {
 		t.Errorf("Unexpected destination address: expected %v, got %v", expectedDst, pkt.DestAddress)
 	}
 	if len(pkt.Options) != 0 {
@@ -76,7 +76,7 @@ func TestIPv6Good(t *testing.T) {
 	expectedSrc := []byte{0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x54, 0xdf, 0x2d, 0x24, 0x6b, 0x28, 0x0e}
 	expectedDst := []byte{0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c}
 	pkt := new(IPv6Packet)
-	err := pkt.FromBytes(data)
+	err := pkt.ReadFrom(bytes.NewReader(data))
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -96,10 +96,10 @@ func TestIPv6Good(t *testing.T) {
 	if pkt.HopLimit != uint8(1) {
 		t.Errorf("Unexpected hop limit: expected %v, got %v", 1, pkt.HopLimit)
 	}
-	if bytes.Compare(pkt.SourceAddress, expectedSrc) != 0 {
+	if bytes.Compare(pkt.SourceAddress[:], expectedSrc) != 0 {
 		t.Errorf("Unexpected source address: expected %v, got %v", expectedSrc, pkt.SourceAddress)
 	}
-	if bytes.Compare(pkt.DestinationAddress, expectedDst) != 0 {
+	if bytes.Compare(pkt.DestinationAddress[:], expectedDst) != 0 {
 		t.Errorf("Unexpected destination address: expected %v, got %v", expectedDst, pkt.DestinationAddress)
 	}
 	if _, isUDP := pkt.InternetData().(*UDPDatagram); !isUDP {

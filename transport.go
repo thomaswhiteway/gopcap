@@ -1,5 +1,10 @@
 package gopcap
 
+import (
+	"io"
+	"io/ioutil"
+)
+
 //-----------------------------------------------------------------------------
 // Unknown Transport
 //-----------------------------------------------------------------------------
@@ -15,7 +20,8 @@ func (u *UnknownTransport) TransportData() []byte {
 	return u.data
 }
 
-func (u *UnknownTransport) FromBytes(data []byte) error {
-	u.data = data
-	return nil
+func (u *UnknownTransport) ReadFrom(src io.Reader) error {
+	var err error
+	u.data, err = ioutil.ReadAll(src)
+	return err
 }

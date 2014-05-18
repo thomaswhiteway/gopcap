@@ -1,5 +1,10 @@
 package gopcap
 
+import (
+	"io"
+	"io/ioutil"
+)
+
 //-----------------------------------------------------------------------------
 // TCPSegment
 //-----------------------------------------------------------------------------
@@ -32,28 +37,35 @@ func (t *TCPSegment) TransportData() []byte {
 	return t.data
 }
 
-func (t *TCPSegment) FromBytes(data []byte) error {
-	// Begin by confirming that we have enough data for a complete TCP header.
-	if len(data) < 20 {
-		return InsufficientLength
+func (t *TCPSegment) ReadFrom(src io.Reader) error {
+
+	var offsetAndFlags [2]byte
+
+	err := readFields(src, networkByteOrder, []interface{}{
+		&t.SourcePort,
+		&t.DestinationPort,
+		&t.SequenceNumber,
+		&t.AckNumber,
+		&offsetAndFlags,
+		&t.WindowSize,
+		&t.Checksum,
+		&t.UrgentOffset,
+	})
+
+	if err != nil {
+		return err
 	}
 
-	// The first four fields are really easy.
-	t.SourcePort = getUint16(data[0:2], false)
-	t.DestinationPort = getUint16(data[2:4], false)
-	t.SequenceNumber = getUint32(data[4:8], false)
-	t.AckNumber = getUint32(data[8:12], false)
-
 	// The header size is the top four bits of the next byte.
-	t.HeaderSize = uint8(data[12]) >> 4
+	t.HeaderSize = uint8(offsetAndFlags[0]) >> 4
 
 	// Now we have all the flag fields. First, the NS flag.
-	if (uint8(data[12]) & 0x01) != 0 {
+	if (uint8(offsetAndFlags[0]) & 0x01) != 0 {
 		t.NS = true
 	}
 
 	// The next eight flags are all in the next byte.
-	flags := uint8(data[13])
+	flags := uint8(offsetAndFlags[1])
 	if (flags & 0x80) != 0 {
 		t.CWR = true
 	}
@@ -79,24 +91,22 @@ func (t *TCPSegment) FromBytes(data []byte) error {
 		t.FIN = true
 	}
 
-	// Now we're back to sane things.
-	t.WindowSize = getUint16(data[14:16], false)
-	t.Checksum = getUint16(data[16:18], false)
-	t.UrgentOffset = getUint16(data[18:20], false)
-
 	// If the header size is larger than 5 (it's measured in 32-bit words for reasons that escape me),
 	// we have some number of extra bytes that form the TCP options.
 	extraBytes := (t.HeaderSize - 5) * 4
-	data = data[20:]
+	t.OptionData = make([]byte, extraBytes)
+	readCount, err := src.Read(t.OptionData)
 
-	if len(data) < int(extraBytes) {
+	if readCount < int(extraBytes) {
 		return InsufficientLength
 	}
 
-	t.OptionData = data[:extraBytes]
+	if err != nil && err != io.EOF {
+		return err
+	}
 
 	// All that remains is the contained data.
-	t.data = data[extraBytes:]
+	t.data, err = ioutil.ReadAll(src)
 
-	return nil
+	return err
 }

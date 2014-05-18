@@ -1,5 +1,10 @@
 package gopcap
 
+import (
+	"bytes"
+	"io"
+)
+
 //-------------------------------------------------------------------------------------------
 // UnknownINet
 //-------------------------------------------------------------------------------------------
@@ -14,10 +19,9 @@ func (u *UnknownINet) InternetData() TransportLayer {
 	return u.data
 }
 
-func (u *UnknownINet) FromBytes(data []byte) error {
+func (u *UnknownINet) ReadFrom(src io.Reader) error {
 	u.data = new(UnknownTransport)
-	u.data.FromBytes(data)
-	return nil
+	return u.data.ReadFrom(src)
 }
 
 //-------------------------------------------------------------------------------------------
@@ -38,8 +42,8 @@ type IPv4Packet struct {
 	TTL            uint8
 	Protocol       IPProtocol
 	Checksum       uint16
-	SourceAddress  []byte
-	DestAddress    []byte
+	SourceAddress  [4]byte
+	DestAddress    [4]byte
 	Options        []byte
 	data           TransportLayer
 }
@@ -48,83 +52,90 @@ func (p *IPv4Packet) InternetData() TransportLayer {
 	return p.data
 }
 
-func (p *IPv4Packet) FromBytes(data []byte) error {
+func (p *IPv4Packet) ReadFrom(src io.Reader) error {
 	// The IPv4 header is full of crazy non-aligned fields that I've expanded in the structure.
 	// This makes this function a total nightmare. My apologies in advance.
 
-	// Check that we have enough data for the header, at the very least.
-	if len(data) < 20 {
-		return InsufficientLength
+	var versionIHL uint8
+	var DSCPECN uint8
+	var flagsFragment [2]byte
+
+	err := readFields(src, networkByteOrder, []interface{}{
+		&versionIHL,
+		&DSCPECN,
+		&p.TotalLength,
+		&p.ID,
+		&flagsFragment,
+		&p.TTL,
+		&p.Protocol,
+		&p.Checksum,
+		&p.SourceAddress,
+		&p.DestAddress,
+	})
+
+	if err != nil {
+		return err
 	}
 
 	// Check that this actually is an IPv4 packet.
-	if ((uint8(data[0]) & 0xF0) >> 4) != uint8(4) {
+	if uint8((versionIHL&0xF0)>>4) != uint8(4) {
 		return IncorrectPacket
 	}
 
 	// The header length is the low four bits of the first byte.
-	p.IHL = uint8(data[0]) & 0x0F
+	p.IHL = uint8(versionIHL & 0x0F)
 
 	// The DSCP is the high six(!) bits of the second byte.
-	p.DSCP = (uint8(data[1]) & 0xFC) >> 2
+	p.DSCP = uint8((DSCPECN & 0xFC) >> 2)
 
 	// Congestion notification is the low two bits of the second byte.
-	p.ECN = uint8(data[1]) & 0x03
-
-	// Total length is saner: 16-bit integer.
-	p.TotalLength = getUint16(data[2:4], false)
-
-	// Same with the ID.
-	p.ID = getUint16(data[4:6], false)
+	p.ECN = uint8(DSCPECN & 0x03)
 
 	// Back to the crazy with the flags: the top three bits of the 7th byte. We only care
 	// about bits two and three. It hurt me to write that sentence.
-	if (uint8(data[6]) & 0x40) != 0 {
+	if uint16(flagsFragment[0])&0x40 != 0 {
 		p.DontFragment = true
-	} else if (uint8(data[6]) & 0x20) != 0 {
+	}
+	if uint16(flagsFragment[0])&0x20 != 0 {
 		p.MoreFragments = true
 	}
 
 	// Following from the flag crazy, the fragment offset is the low 13 bits of the 7th
 	// and 8th bytes.
-	p.FragmentOffset = getUint16(data[6:8], false) & 0x1FFF
-
-	// The remaining fields are fairly sensible. TTL is the 9th byte.
-	p.TTL = uint8(data[8])
-
-	// Protocol is the tenth.
-	p.Protocol = IPProtocol(data[9])
-
-	// Header checksum is eleven and twelve.
-	p.Checksum = getUint16(data[10:12], false)
-
-	// Then the source IP and destination IP.
-	p.SourceAddress = data[12:16]
-	p.DestAddress = data[16:20]
+	p.FragmentOffset = uint16((flagsFragment[0] & 0x1F) << 8)
+	p.FragmentOffset += uint16(flagsFragment[1])
 
 	// If IHL is more than 5, we have (IHL - 5) * 4 bytes of options.
 	if p.IHL > 5 {
 		optionLength := uint16(p.IHL-5) * 4
-		p.Options = data[20 : 20+optionLength]
-
-		// Reslice data so that the actual packet contents still start at offset 20.
-		data = data[optionLength:]
+		p.Options = make([]byte, optionLength)
+		readCount, err := src.Read(p.Options)
+		if uint16(readCount) < optionLength {
+			return InsufficientLength
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	// The data length is the total length, minus the headers. The headers are, for no good
 	// reason, measured in 32-bit words, so the data length is actually:
 	dataLen := p.TotalLength - (uint16(p.IHL) * 4)
-	if len(data[20:]) != int(dataLen) {
-		return IncorrectPacket
+
+	internetData := make([]byte, dataLen)
+	readCount, err := src.Read(internetData)
+	if uint16(readCount) < dataLen {
+		return InsufficientLength
+	}
+	if err != nil && err != io.EOF {
+		return err
 	}
 
 	// Build the transport layer data.
-	p.buildTransportLayer(data[20:])
-
-	return nil
+	return p.readTransportLayer(bytes.NewReader(internetData))
 }
 
-func (p *IPv4Packet) buildTransportLayer(data []byte) {
+func (p *IPv4Packet) readTransportLayer(src io.Reader) error {
 	switch p.Protocol {
 	case IPP_TCP:
 		p.data = new(TCPSegment)
@@ -135,7 +146,7 @@ func (p *IPv4Packet) buildTransportLayer(data []byte) {
 	default:
 		p.data = new(UnknownTransport)
 	}
-	p.data.FromBytes(data)
+	return p.data.ReadFrom(src)
 }
 
 //-------------------------------------------------------------------------------------------
@@ -148,8 +159,8 @@ type IPv6Packet struct {
 	Length             uint16
 	NextHeader         IPProtocol
 	HopLimit           uint8
-	SourceAddress      []byte
-	DestinationAddress []byte
+	SourceAddress      [16]byte
+	DestinationAddress [16]byte
 	data               TransportLayer
 }
 
@@ -157,42 +168,43 @@ func (p *IPv6Packet) InternetData() TransportLayer {
 	return p.data
 }
 
-func (p *IPv6Packet) FromBytes(data []byte) error {
-	// Confirm that we have enough data for the smallest possible header.
-	if len(data) < 40 {
-		return InsufficientLength
+func (p *IPv6Packet) ReadFrom(src io.Reader) error {
+
+	var startBytes [4]byte
+
+	err := readFields(src, networkByteOrder, []interface{}{
+		&startBytes,
+		&p.Length,
+		&p.NextHeader,
+		&p.HopLimit,
+		&p.SourceAddress,
+		&p.DestinationAddress,
+	})
+
+	if err != nil {
+		return err
 	}
 
 	// Check that this actually is an IPv6 packet.
-	if ((uint8(data[0]) & 0xF0) >> 4) != uint8(6) {
+	if ((uint8(startBytes[0]) & 0xF0) >> 4) != uint8(6) {
 		return IncorrectPacket
 	}
 
 	// The traffic class is the octet following the version.
-	p.TrafficClass = (uint8(data[0]) & 0x0F) << 4
-	p.TrafficClass += (uint8(data[1]) * 0xF0) >> 4
+	p.TrafficClass = (uint8(startBytes[0]) & 0x0F) << 4
+	p.TrafficClass += (uint8(startBytes[1]) & 0xF0) >> 4
 
 	// The flow label is the next 20 bits.
-	p.FlowLabel = (uint32(data[1]) & 0x0F) << 16
-	p.FlowLabel += uint32(data[2]) << 8
-	p.FlowLabel += uint32(data[3])
-
-	// The remaining fields are simply aligned.
-	p.Length = getUint16(data[4:6], false)
-	p.NextHeader = IPProtocol(data[6])
-	p.HopLimit = uint8(data[7])
-
-	p.SourceAddress = data[8:24]
-	p.DestinationAddress = data[24:40]
+	p.FlowLabel = (uint32(startBytes[1]) & 0x0F) << 16
+	p.FlowLabel += uint32(startBytes[2]) << 8
+	p.FlowLabel += uint32(startBytes[3])
 
 	// Following the fixed headers are a sequence of extension headers
 	// terminating in the transport data.
-	p.parseRemainingHeaders(data[40:])
-
-	return nil
+	return p.readRemainingHeaders(src)
 }
 
-func (p *IPv6Packet) parseRemainingHeaders(data []byte) {
+func (p *IPv6Packet) readRemainingHeaders(src io.Reader) error {
 	// Currently we don't support any extension headers so if the next header
 	// isn't the transport data then give up and interpret it as an unknown
 	// transport type.
@@ -206,5 +218,5 @@ func (p *IPv6Packet) parseRemainingHeaders(data []byte) {
 	default:
 		p.data = new(UnknownTransport)
 	}
-	p.data.FromBytes(data)
+	return p.data.ReadFrom(src)
 }

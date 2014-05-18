@@ -1,5 +1,9 @@
 package gopcap
 
+import (
+	"io"
+)
+
 //-----------------------------------------------------------------------------
 // SCTPSegment
 //-----------------------------------------------------------------------------
@@ -28,20 +32,20 @@ func (s *SCTPSegment) TransportData() []byte {
 	return data
 }
 
-func (s *SCTPSegment) FromBytes(data []byte) error {
-	// Begin by confirming that we have enough data to actually represent an SCTP segment
-	if len(data) < 12 {
-		return InsufficientLength
+func (s *SCTPSegment) ReadFrom(src io.Reader) error {
+	err := readFields(src, networkByteOrder, []interface{}{
+		&s.SourcePort,
+		&s.DestinationPort,
+		&s.VerificationTag,
+		&s.Checksum,
+	})
+
+	if err != nil {
+		return err
 	}
 
-	// The common header for SCTP is very simple.
-	s.SourcePort = getUint16(data[0:2], false)
-	s.DestinationPort = getUint16(data[2:4], false)
-	s.VerificationTag = getUint32(data[4:8], false)
-	s.Checksum = getUint32(data[8:12], false)
-
 	// Read the chunks from the rest of the request
-	chunks, err := parseSCTPChunks(data[12:])
+	chunks, err := readSCTPChunks(src)
 	if err != nil {
 		return err
 	}

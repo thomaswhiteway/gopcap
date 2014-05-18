@@ -1,5 +1,10 @@
 package gopcap
 
+import (
+	"encoding/binary"
+	"io"
+)
+
 // getUint16 takes a two-element byte slice and returns the uint16 contained within it. If flipped
 // is set, assumes the byte order is reversed.
 func getUint16(buf []byte, flipped bool) uint16 {
@@ -44,3 +49,16 @@ func getInt32(buf []byte, flipped bool) int32 {
 
 	return num
 }
+
+func readFields(src io.Reader, order binary.ByteOrder, fields []interface{}) error {
+	for _, field := range fields {
+		err := binary.Read(src, order, field)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+var networkByteOrder binary.ByteOrder = binary.BigEndian

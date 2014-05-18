@@ -15,7 +15,7 @@ import (
 // Errors
 var NotAPcapFile error = errors.New("Not a pcap file.")
 var InsufficientLength error = errors.New("Insufficient length.")
-var UnexpectedEOF error = errors.New("Unexpected EOF.")
+var UnexpectedEOF error = io.ErrUnexpectedEOF
 var IncorrectPacket error = errors.New("Incorrect packet type.")
 
 // Link encodes a given Link-Layer header type. See http://www.tcpdump.org/linktypes.html for a more-full
@@ -209,7 +209,7 @@ type Packet struct {
 // of the structure of the link-layer in question.
 type LinkLayer interface {
 	LinkData() InternetLayer
-	FromBytes(data []byte) error
+	ReadFrom(src io.Reader) error
 }
 
 // InternetLayer is a non-specific representation of a single internet-layer level datagram, e.g. an
@@ -217,7 +217,7 @@ type LinkLayer interface {
 // knowledge of the structure of the internet-layer in question.
 type InternetLayer interface {
 	InternetData() TransportLayer
-	FromBytes(data []byte) error
+	ReadFrom(src io.Reader) error
 }
 
 // TransportLayer is a non-specific representation of a single transport-layer level datagram, e.g. a
@@ -225,7 +225,7 @@ type InternetLayer interface {
 // knowledge of the structure of the transport-layer protocol in question.
 type TransportLayer interface {
 	TransportData() []byte
-	FromBytes(data []byte) error
+	ReadFrom(src io.Reader) error
 }
 
 // Parse is the external API of gopcap. It takes anything that implements the
@@ -237,13 +237,13 @@ func Parse(src io.Reader) (PcapFile, error) {
 	file := new(PcapFile)
 
 	// Check whether this is a libpcap file at all, and if so what byte ordering it has.
-	_, flipped, err := checkMagicNum(src)
+	_, order, err := checkMagicNum(src)
 	if err != nil {
 		return *file, err
 	}
 
 	// Then populate the file header.
-	err = populateFileHeader(file, src, flipped)
+	err = file.readFileHeader(src, order)
 	if err != nil {
 		return *file, err
 	}
@@ -253,7 +253,7 @@ func Parse(src io.Reader) (PcapFile, error) {
 
 	for err == nil {
 		pkt := new(Packet)
-		err = parsePacket(pkt, src, flipped, file.LinkType)
+		err = pkt.ReadFrom(src, order, file.LinkType)
 		file.Packets = append(file.Packets, *pkt)
 	}
 

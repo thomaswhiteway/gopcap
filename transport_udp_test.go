@@ -1,6 +1,7 @@
 package gopcap
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestUDPGood(t *testing.T) {
 	}
 
 	dgram := new(UDPDatagram)
-	err := dgram.FromBytes(data)
+	err := dgram.ReadFrom(bytes.NewReader(data))
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)

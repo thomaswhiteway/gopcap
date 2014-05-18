@@ -16,6 +16,11 @@ func TestParse(t *testing.T) {
 
 	parsed, err := Parse(src)
 
+	// Check there's no error
+	if err != nil {
+		t.Errorf("Received unexpected error: %v", err)
+	}
+
 	// Check the file header.
 	if parsed.MajorVersion != uint16(2) {
 		t.Errorf("Incorrectly parsed major version: expected %v, got %v.", 2, parsed.MajorVersion)
@@ -59,10 +64,10 @@ func TestParse(t *testing.T) {
 	macSrc := []byte{0x00, 0x04, 0x76, 0x96, 0x7B, 0xDA}
 	macDst := []byte{0x00, 0x16, 0xE3, 0x19, 0x27, 0x15}
 
-	if bytes.Compare(frame.MACSource, macSrc) != 0 {
+	if bytes.Compare(frame.MACSource[:], macSrc) != 0 {
 		t.Errorf("Unexpected source MAC: expected %v, got %v.", macSrc, frame.MACSource)
 	}
-	if bytes.Compare(frame.MACDestination, macDst) != 0 {
+	if bytes.Compare(frame.MACDestination[:], macDst) != 0 {
 		t.Errorf("Unexpected destination MAC: expected %v, got %v.", macDst, frame.MACDestination)
 	}
 	if len(frame.VLANTag) != 0 {
@@ -113,10 +118,10 @@ func TestParse(t *testing.T) {
 	if pkt.Checksum != uint16(22223) {
 		t.Errorf("Unexpected checksum: expected %v, got %v", 22223, pkt.Checksum)
 	}
-	if bytes.Compare(pkt.SourceAddress, expectedSrc) != 0 {
+	if bytes.Compare(pkt.SourceAddress[:], expectedSrc) != 0 {
 		t.Errorf("Unexpected source address: expected %v, got %v", expectedSrc, pkt.SourceAddress)
 	}
-	if bytes.Compare(pkt.DestAddress, expectedDst) != 0 {
+	if bytes.Compare(pkt.DestAddress[:], expectedDst) != 0 {
 		t.Errorf("Unexpected destination address: expected %v, got %v", expectedDst, pkt.DestAddress)
 	}
 	if len(pkt.Options) != 0 {
