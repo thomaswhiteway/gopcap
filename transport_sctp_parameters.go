@@ -87,6 +87,10 @@ func (h *SCTPChunkParameterHeader) setHeader(header *SCTPChunkParameterHeader) {
 	h.Length = header.Length
 }
 
+//-----------------------------------------------------------------------------
+// SCTPChunkParameterUnknown
+//-----------------------------------------------------------------------------
+
 // SCTPChunkParameterUnknown represents a parameter for a parameter we don't understand.  The data
 // consists of all data after the header.
 type SCTPChunkParameterUnknown struct {
@@ -99,6 +103,10 @@ func (p *SCTPChunkParameterUnknown) readBodyFrom(src io.Reader) error {
 	_, err := src.Read(p.Data)
 	return err
 }
+
+//-----------------------------------------------------------------------------
+// SCTPChunkParameterIPv4Sender
+//-----------------------------------------------------------------------------
 
 // SCTPChunkParameterIPv4Sender represents the parameter in an SCTP INIT chunk containing the IPv4
 // address of the sending endpoint.
@@ -113,6 +121,10 @@ func (p *SCTPChunkParameterIPv4Sender) readBodyFrom(src io.Reader) error {
 	})
 }
 
+//-----------------------------------------------------------------------------
+// SCTPChunkParameterIPv6Sender
+//-----------------------------------------------------------------------------
+
 // SCTPChunkParameterIPv6Sender represents the parameter in an SCTP INIT chunk containing the IPv6
 // address of the sending endpoint.
 type SCTPChunkParameterIPv6Sender struct {
@@ -126,6 +138,10 @@ func (p *SCTPChunkParameterIPv6Sender) readBodyFrom(src io.Reader) error {
 	})
 }
 
+//-----------------------------------------------------------------------------
+// SCTPChunkParameterCookieLifespanInc
+//-----------------------------------------------------------------------------
+
 // SCTPChunkParameterCookieLifespanInc represents the parameter in an SCTP INIT chunk containing the
 // suggested cookie lifespan increment.
 type SCTPChunkParameterCookieLifespanInc struct {
@@ -138,6 +154,10 @@ func (p *SCTPChunkParameterCookieLifespanInc) readBodyFrom(src io.Reader) error 
 		&p.Increment,
 	})
 }
+
+//-----------------------------------------------------------------------------
+// SCTPChunkParameterHeartbeatInfo
+//-----------------------------------------------------------------------------
 
 // SCTPChunkParameterHeartbeatInfo represents the parameter in a HEARTBEAT or HEARTBEAT ACK
 // chunk.
